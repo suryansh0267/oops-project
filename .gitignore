@@ -1,0 +1,38 @@
+# Compiled class files & build directories
+**/target/
+backend/target/
+frontend/dist/
+frontend/dist-ssr/
+frontend/node_modules/
+**/node_modules/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE & Editor files
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.classpath
+.project
+.settings/
+
+# Agent & temporary files
+.gemini/
