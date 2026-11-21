@@ -1,6 +1,7 @@
 package com.itsm.service;
 
 import com.itsm.dto.RegisterRequest;
+import com.itsm.dto.UserUpdateRequest;
 import com.itsm.dto.UserResponse;
 import com.itsm.entity.TechnicianProfile;
 import com.itsm.entity.User;
@@ -15,8 +16,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.itsm.dto.admin.TechnicianProfileRequest;
+
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -44,16 +50,25 @@ public class UserService {
                 .toList();
     }
 
+    /** Public self-registration: always creates an EMPLOYEE, whatever the request says. */
+    @Transactional
+    public User registerEmployee(RegisterRequest request) {
+        return create(request, UserRole.EMPLOYEE);
+    }
+
+    /** Admin user creation: the admin chooses the role. */
     @Transactional
     public UserResponse createUser(RegisterRequest request) {
+        return mapToResponse(create(request, request.getRole() != null ? request.getRole() : UserRole.EMPLOYEE));
+    }
+
+    private User create(RegisterRequest request, UserRole role) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new DuplicateResourceException("Username already in use: " + request.getUsername());
         }
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new DuplicateResourceException("Email already in use: " + request.getEmail());
         }
-
-        UserRole role = request.getRole() != null ? request.getRole() : UserRole.EMPLOYEE;
 
         User user = User.builder()
                 .username(request.getUsername())
@@ -91,11 +106,11 @@ public class UserService {
             technicianProfileRepository.save(profile);
         }
 
-        return mapToResponse(savedUser);
+        return savedUser;
     }
 
     @Transactional
-    public UserResponse updateUser(Long id, RegisterRequest request) {
+    public UserResponse updateUser(Long id, UserUpdateRequest request) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
 
@@ -112,90 +127,98 @@ public class UserService {
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
             user.setPassword(passwordEncoder.encode(request.getPassword()));
         }
-        if (request.getRole() != null) {
+        if (request.getRole() != null && request.getRole() != user.getRole()) {
             user.setRole(request.getRole());
+            if (request.getRole() == UserRole.TECHNICIAN && technicianProfileRepository.findByUser(user).isEmpty()) {
+                technicianProfileRepository.save(TechnicianProfile.builder()
+                        .user(user).skills(new ArrayList<>(List.of("GENERAL")))
+                        .specialization("General IT Support").maxActiveIncidents(10).available(true).build());
+            }
         }
 
         return mapToResponse(userRepository.save(user));
     }
 
     @Transactional
-    public void deactivateUser(Long id) {
+    public void deactivateUser(Long id, String actingUsername) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+        if (user.getUsername().equals(actingUsername)) {
+            throw new BadRequestException("You cannot deactivate your own account");
+        }
         user.setActive(false);
         userRepository.save(user);
+        technicianProfileRepository.findByUser(user).ifPresent(p -> {
+            p.setAvailable(false);
+            technicianProfileRepository.save(p);
+        });
     }
 
     @Transactional
-    public TechnicianProfile createTechnicianProfile(Long userId, List<String> skills, String specialization) {
+    public UserResponse activateUser(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+        user.setActive(true);
+        return mapToResponse(userRepository.save(user));
+    }
+
+    public List<Map<String, Object>> getTechnicianProfiles() {
+        return technicianProfileRepository.findAll().stream().map(this::profileMap).toList();
+    }
+
+    public Map<String, Object> getMyProfile(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "username", username));
+        return technicianProfileRepository.findByUser(user).map(this::profileMap)
+                .orElseThrow(() -> new ResourceNotFoundException("Technician profile", "user", username));
+    }
+
+    /** Creates the profile if missing; null fields in the request are left unchanged. */
+    @Transactional
+    public Map<String, Object> upsertTechnicianProfile(Long userId, TechnicianProfileRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-
         if (user.getRole() != UserRole.TECHNICIAN && user.getRole() != UserRole.ADMIN) {
-            throw new BadRequestException("User must have TECHNICIAN or ADMIN role to have a technician profile");
+            throw new BadRequestException("Only technicians and admins can have a technician profile");
         }
-
         TechnicianProfile profile = technicianProfileRepository.findByUser(user)
-                .orElse(TechnicianProfile.builder()
-                        .user(user)
-                        .skills(new ArrayList<>())
-                        .certifications(new ArrayList<>())
-                        .build());
-
-        if (skills != null) {
-            profile.setSkills(new ArrayList<>(skills));
+                .orElse(TechnicianProfile.builder().user(user).skills(new ArrayList<>())
+                        .certifications(new ArrayList<>()).build());
+        if (request.skills() != null) {
+            profile.setSkills(new ArrayList<>(request.skills().stream()
+                    .map(sk -> sk.trim().toUpperCase()).distinct().toList()));
         }
-        if (specialization != null) {
-            profile.setSpecialization(specialization);
+        if (request.specialization() != null) {
+            profile.setSpecialization(request.specialization().trim());
         }
-
-        return technicianProfileRepository.save(profile);
+        if (request.maxActiveIncidents() != null) {
+            if (request.maxActiveIncidents() < profile.getCurrentActiveIncidents()) {
+                throw new BadRequestException("Capacity cannot be lower than the " + profile.getCurrentActiveIncidents()
+                        + " incidents this technician already has");
+            }
+            profile.setMaxActiveIncidents(request.maxActiveIncidents());
+        }
+        if (request.available() != null) {
+            profile.setAvailable(request.available());
+        }
+        return profileMap(technicianProfileRepository.save(profile));
     }
 
-    public List<java.util.Map<String, Object>> getTechnicianProfiles() {
-        return technicianProfileRepository.findAll().stream().map(tp -> {
-            java.util.Map<String, Object> map = new java.util.HashMap<>();
-            map.put("userId", tp.getUser().getId());
-            map.put("fullName", tp.getUser().getFullName());
-            map.put("username", tp.getUser().getUsername());
-            map.put("department", tp.getUser().getDepartment() != null ? tp.getUser().getDepartment() : "IT Support");
-            map.put("skills", tp.getSkills() != null ? tp.getSkills() : java.util.Collections.emptyList());
-            map.put("specialization", tp.getSpecialization() != null ? tp.getSpecialization() : "");
-            map.put("maxActiveIncidents", tp.getMaxActiveIncidents());
-            map.put("currentActiveIncidents", tp.getCurrentActiveIncidents());
-            map.put("totalResolvedIncidents", tp.getTotalResolvedIncidents());
-            map.put("available", tp.isAvailable());
-            return map;
-        }).toList();
-    }
-
-    @Transactional
-    public TechnicianProfile updateTechnicianProfile(Long userId, List<String> skills, Integer maxActive, String specialization, Boolean available) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-
-        TechnicianProfile profile = technicianProfileRepository.findByUser(user)
-                .orElse(TechnicianProfile.builder()
-                        .user(user)
-                        .skills(new ArrayList<>())
-                        .certifications(new ArrayList<>())
-                        .build());
-
-        if (skills != null) {
-            profile.setSkills(new ArrayList<>(skills));
-        }
-        if (specialization != null) {
-            profile.setSpecialization(specialization);
-        }
-        if (maxActive != null) {
-            profile.setMaxActiveIncidents(maxActive);
-        }
-        if (available != null) {
-            profile.setAvailable(available);
-        }
-
-        return technicianProfileRepository.save(profile);
+    private Map<String, Object> profileMap(TechnicianProfile tp) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("userId", tp.getUser().getId());
+        map.put("fullName", tp.getUser().getFullName());
+        map.put("username", tp.getUser().getUsername());
+        map.put("department", tp.getUser().getDepartment() != null ? tp.getUser().getDepartment() : "IT Support");
+        map.put("skills", tp.getSkills() != null ? tp.getSkills() : Collections.emptyList());
+        map.put("specialization", tp.getSpecialization() != null ? tp.getSpecialization() : "");
+        map.put("maxActiveIncidents", tp.getMaxActiveIncidents());
+        map.put("currentActiveIncidents", tp.getCurrentActiveIncidents());
+        map.put("totalResolvedIncidents", tp.getTotalResolvedIncidents());
+        map.put("avgResolutionMinutes", Math.round(tp.getAvgResolutionTimeMinutes()));
+        map.put("available", tp.isAvailable());
+        map.put("active", tp.getUser().isActive());
+        return map;
     }
 
     public UserResponse mapToResponse(User user) {

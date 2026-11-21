@@ -1,80 +1,80 @@
 @import "tailwindcss";
 
+/*
+  I-ITSM design tokens
+  Cool slate "paper", deep ink, and colour reserved for meaning:
+  priority (P1-P4), SLA state, and a role tint so each user type has its own workspace.
+*/
 @theme {
-  --font-sans: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-heading: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
-  --font-space: 'Plus Jakarta Sans', sans-serif;
+  --font-sans: "Public Sans Variable", "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --color-paper: #EDF0F3;
+  --color-surface: #FFFFFF;
+  --color-sunken: #F5F7F9;
+  --color-ink: #16202B;
+  --color-steel: #4A5A6B;
+  --color-muted: #6B7A8A;
+  --color-line: #D5DCE3;
+  --color-line-soft: #E4E9EE;
+
+  --color-p1: #B3261E;
+  --color-p1-soft: #FBE9E7;
+  --color-p2: #C76A00;
+  --color-p2-soft: #FDF0E0;
+  --color-p3: #2D63A6;
+  --color-p3-soft: #E6EEF8;
+  --color-p4: #4F7552;
+  --color-p4-soft: #E8F0E8;
+
+  --color-ok: #2F7A4F;
+  --color-ok-soft: #E3F1E8;
+  --color-warn: #A86400;
+  --color-warn-soft: #FCF0DC;
+  --color-bad: #B3261E;
+  --color-bad-soft: #FBE9E7;
+
+  --color-role-employee: #2E7D6B;
+  --color-role-technician: #2D63A6;
+  --color-role-admin: #6B3FA0;
 }
 
 @layer base {
-  :root {
-    --font-heading: 'Plus Jakarta Sans', sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
-    --font-sans: 'Plus Jakarta Sans', 'Inter', sans-serif;
-  }
-
-  * {
-    border-color: #E2E8F0;
-  }
-
   html {
-    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background: var(--color-paper);
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
-
   body {
-    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    background-color: #F8FAFC;
-    color: #0F172A;
     min-height: 100vh;
-    letter-spacing: -0.015em;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    background-image: 
-      radial-gradient(circle at 50% 0%, rgba(15, 23, 42, 0.02) 0%, transparent 70%),
-      linear-gradient(to right, rgba(226, 232, 240, 0.45) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(226, 232, 240, 0.45) 1px, transparent 1px);
-    background-size: 100% 100%, 32px 32px, 32px 32px;
+    font-size: 15px;
+    line-height: 1.5;
   }
-
-  h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-heading);
-    letter-spacing: -0.025em;
+  h1, h2, h3 {
+    line-height: 1.2;
+    letter-spacing: -0.01em;
   }
-
-  code, pre, .font-mono, [data-mono] {
-    font-family: var(--font-mono);
+  :focus-visible {
+    outline: 2px solid var(--color-p3);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  ::selection {
+    background: #CFE0F5;
   }
 }
 
-/* Custom Tactical UI Classes Styled with Crisp Executive White Aesthetic */
-.hud-panel {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.03), 0 1px 2px -1px rgba(15, 23, 42, 0.03);
+@layer utilities {
+  .tnum { font-variant-numeric: tabular-nums; }
 }
 
-.hud-panel-accent {
-  background: #FFFFFF;
-  border: 1px solid #CBD5E1;
-  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+/* The live SLA bar is the one animated element: it fills as the deadline approaches. */
+.sla-track { height: 6px; border-radius: 999px; background: var(--color-line-soft); overflow: hidden; }
+.sla-fill { height: 100%; border-radius: 999px; transition: width 1s linear; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 
-/* Clean Executive Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #F8FAFC;
-}
-::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
-}
+.Toastify__toast { font-family: var(--font-sans); font-size: 14px; border-radius: 10px; }

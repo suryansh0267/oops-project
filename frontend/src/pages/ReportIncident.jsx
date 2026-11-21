@@ -1,307 +1,226 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Lightbulb, Copy } from 'lucide-react';
+import { toast } from 'react-toastify';
 import api from '../api/client';
-import {
-  AlertTriangle,
-  Send,
-  Sparkles,
-  Info,
-  CheckCircle2,
-  Server,
-  Layers,
-  Flame,
-  Terminal,
-  Activity,
-  Radar
-} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useApi, useDebounced } from '../lib/hooks';
+import { Button, ErrorNote, Field, Input, PageHeader, Panel, Select, StatusBadge, Textarea } from '../components/ui';
+import { IMPACT_HELP, URGENCY_HELP, apiError, categoryLabel, timeAgo } from '../lib/format';
+
+const AUTO = '';
 
 export default function ReportIncident() {
   const navigate = useNavigate();
-  const [services, setServices] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [formData, setFormData] = useState({
+  const { isEmployee } = useAuth();
+  const { data: services } = useApi('/public/services', { initial: [] });
+  const { data: categories } = useApi('/public/categories', { initial: [] });
+
+  const [form, setForm] = useState({
     title: '',
     description: '',
-    category: 'APPLICATION',
+    category: AUTO,
     impact: 'MEDIUM',
     urgency: 'MEDIUM',
     affectedServiceId: '',
+    affectedUsers: '',
   });
-
-  const [loading, setLoading] = useState(false);
+  const [suggestion, setSuggestion] = useState(null);
+  const [similar, setSimilar] = useState([]);
   const [error, setError] = useState('');
-  const [duplicates, setDuplicates] = useState([]);
-  const [allIncidents, setAllIncidents] = useState([]);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [servicesRes, incRes, catsRes] = await Promise.all([
-          api.get('/public/services'),
-          api.get('/incidents'),
-          api.get('/public/categories'),
-        ]);
-        setServices(servicesRes.data);
-        setAllIncidents(incRes.data);
-        setCategories(catsRes.data);
-        if (servicesRes.data.length > 0) {
-          setFormData((prev) => ({ ...prev, affectedServiceId: servicesRes.data[0].id }));
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    loadData();
-  }, []);
+  const draft = useDebounced(`${form.title}\u0000${form.description}\u0000${form.affectedServiceId}`, 500);
 
-  // Client-side real-time Duplicate Detection (Intelligent Feature)
+  // Live classification + duplicate check (intelligent features F and A)
   useEffect(() => {
-    if (!formData.title || formData.title.length < 5) {
-      setDuplicates([]);
+    const [title, description, serviceId] = draft.split('\u0000');
+    if (title.trim().length < 5 && description.trim().length < 10) {
+      setSuggestion(null);
+      setSimilar([]);
       return;
     }
+    let cancelled = false;
+    const body = { title, description, affectedServiceId: serviceId ? Number(serviceId) : null };
+    Promise.all([api.post('/incidents/classify', body), api.post('/incidents/similar', body)])
+      .then(([c, s]) => {
+        if (cancelled) return;
+        setSuggestion(c.data.confidence > 0 ? c.data : null);
+        setSimilar(s.data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [draft]);
 
-    const titleTokens = new Set(
-      formData.title.toLowerCase().split(/\W+/).filter((w) => w.length > 2)
-    );
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
-    const matches = allIncidents.filter((inc) => {
-      if (inc.status === 'CLOSED' || inc.status === 'RESOLVED') return false;
-      const otherTokens = new Set(
-        inc.title.toLowerCase().split(/\W+/).filter((w) => w.length > 2)
-      );
-
-      let shared = 0;
-      for (const t of titleTokens) {
-        if (otherTokens.has(t)) shared++;
-      }
-      return shared >= 2;
-    });
-
-    setDuplicates(matches.slice(0, 3));
-  }, [formData.title, allIncidents]);
-
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setBusy(true);
     setError('');
-
     try {
-      const payload = {
-        title: formData.title,
-        description: formData.description,
-        category: formData.category,
-        impact: formData.impact,
-        urgency: formData.urgency,
-        affectedServiceId: formData.affectedServiceId ? Number(formData.affectedServiceId) : null,
-      };
-
-      const res = await api.post('/incidents', payload);
+      const res = await api.post('/incidents', {
+        title: form.title.trim(),
+        description: form.description.trim(),
+        category: form.category || null,
+        impact: form.impact,
+        urgency: form.urgency,
+        affectedServiceId: form.affectedServiceId ? Number(form.affectedServiceId) : null,
+        affectedUsers: form.affectedUsers ? Number(form.affectedUsers) : null,
+      });
+      toast.success(`${res.data.incidentNumber} logged as ${res.data.priority.replace('_', ' ').toLowerCase()} priority`);
       navigate(`/incidents/${res.data.id}`);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to dispatch incident');
+      setError(apiError(err));
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
+  const chosenCategory = form.category || suggestion?.category;
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="hud-panel p-6 rounded-2xl relative overflow-hidden bg-white border border-slate-200 shadow-xs">
-        <div className="flex items-center space-x-2 text-[10px] font-mono text-slate-500 mb-1 uppercase tracking-widest font-semibold">
-          <Terminal className="w-3.5 h-3.5" />
-          <span>INCIDENT_DISPATCH_PORTAL // TELEMETRY_INGESTION</span>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 border-b border-slate-200">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight font-heading">
-              Dispatch Operational Incident
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Automated classification, Strategy-based priority calculation, and dynamic SLA deadline derivation.
-            </p>
-          </div>
-          <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-mono text-[10px] font-semibold">
-            <Radar className="w-3.5 h-3.5 text-slate-700 animate-spin" />
-            <span>HEURISTIC_DEDUPLICATION: ARMED</span>
-          </div>
-        </div>
+    <>
+      <PageHeader
+        title={isEmployee ? 'Report an incident' : 'Log an incident'}
+        description="Describe what's wrong. We work out the category, priority and deadlines, then route it to the right technician."
+        back={{ to: '/incidents', label: 'Incidents' }}
+      />
 
-        {error && (
-          <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-mono">
-            [!ERROR]: {error}
-          </div>
-        )}
+      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <Panel>
+          <form onSubmit={submit} className="space-y-5">
+            <ErrorNote>{error}</ErrorNote>
 
-        {/* Intelligent Duplicate Warning Banner */}
-        {duplicates.length > 0 && (
-          <div className="mt-4 p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-slate-800 animate-in fade-in duration-200 font-mono">
-            <div className="flex items-center space-x-2 font-bold text-xs text-amber-900">
-              <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 animate-pulse" />
-              <span>[WARNING: HEURISTIC_MATCH_DETECTED] SIMILAR ACTIVE TICKETS EXIST</span>
-            </div>
-            <p className="text-[11px] text-amber-800/90 mt-1 font-sans">
-              Similar operational disruptions are already under investigation. Please review existing tickets to prevent redundant dispatches:
-            </p>
-            <div className="mt-2.5 space-y-1.5">
-              {duplicates.map((d) => (
-                <div key={d.id} className="text-xs bg-white p-2.5 rounded-xl border border-amber-200 flex justify-between items-center shadow-xs">
-                  <span className="font-semibold text-slate-900 font-sans">
-                    <span className="font-mono text-slate-600 mr-2">[{d.incidentNumber}]</span>
-                    {d.title}
-                  </span>
-                  <span className="text-[10px] font-mono text-amber-900 px-2 py-0.5 rounded bg-amber-50 border border-amber-300 font-bold">
-                    STAGE: {d.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+            <Field label="What's the problem?" htmlFor="title" hint="A short summary, like 'Payment page shows error 503'">
+              <Input id="title" required minLength={5} maxLength={150} value={form.title} onChange={set('title')} />
+            </Field>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-5 font-mono text-xs">
-          <div>
-            <label className="block text-[11px] uppercase tracking-wider text-slate-700 font-bold mb-1.5">
-              INCIDENT_TITLE / DISRUPTION_SUMMARY *
-            </label>
-            <input
-              type="text"
-              name="title"
-              value={formData.title}
-              onChange={handleChange}
-              required
-              placeholder="e.g. Identity SSO Service returns HTTP 504 Gateway Timeout during auth handshake"
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-200 font-sans"
-            />
-          </div>
+            <Field label="Details" htmlFor="desc" hint="What were you doing, what did you expect, and what happened? Include any error message.">
+              <Textarea id="desc" required maxLength={5000} rows={5} value={form.description} onChange={set('description')} />
+            </Field>
 
-          <div>
-            <label className="block text-[11px] uppercase tracking-wider text-slate-700 font-bold mb-1.5">
-              DETAILED_SYMPTOM_DIAGNOSTICS *
-            </label>
-            <textarea
-              name="description"
-              rows={4}
-              value={formData.description}
-              onChange={handleChange}
-              required
-              placeholder="Detail error trace, affected user groups, reproduction sequence, and observed operational degradation..."
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-200 font-sans leading-relaxed"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[11px] uppercase tracking-wider text-slate-700 font-bold mb-1.5">
-                AFFECTED_IT_SERVICE
-              </label>
-              <select
-                name="affectedServiceId"
-                value={formData.affectedServiceId}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900 font-sans"
-              >
-                {services.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} (Criticality: {s.businessCriticality}/5)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] uppercase tracking-wider text-slate-700 font-bold mb-1.5">
-                DOMAIN_CLASSIFICATION
-              </label>
-              <select
-                name="category"
-                value={formData.category}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900 font-mono"
-              >
-                {categories.length > 0 ? (
-                  categories.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Affected service" htmlFor="svc" optional>
+                <Select id="svc" value={form.affectedServiceId} onChange={set('affectedServiceId')}>
+                  <option value="">Not sure / none</option>
+                  {services.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
                     </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="APPLICATION">APPLICATION</option>
-                    <option value="DATABASE">DATABASE</option>
-                    <option value="NETWORK">NETWORK</option>
-                    <option value="SECURITY">SECURITY</option>
-                    <option value="AUTHENTICATION">AUTHENTICATION</option>
-                    <option value="CLOUD">CLOUD</option>
-                    <option value="STORAGE">STORAGE</option>
-                    <option value="HARDWARE">HARDWARE</option>
-                    <option value="SOFTWARE">SOFTWARE</option>
-                    <option value="OTHER">OTHER</option>
-                  </>
-                )}
-              </select>
-            </div>
-          </div>
+                  ))}
+                </Select>
+              </Field>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
-            <div>
-              <label className="block text-[11px] uppercase tracking-wider text-slate-700 font-bold mb-1.5 flex items-center space-x-1.5">
-                <Flame className="h-3.5 w-3.5 text-rose-600" />
-                <span>BUSINESS_IMPACT_TIER</span>
-              </label>
-              <select
-                name="impact"
-                value={formData.impact}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-slate-900"
-              >
-                <option value="HIGH">HIGH (Org-wide / multi-department disruption)</option>
-                <option value="MEDIUM">MEDIUM (Group-level / partial degradation)</option>
-                <option value="LOW">LOW (Isolated single user or cosmetic defect)</option>
-              </select>
+              <Field label="Category" htmlFor="cat">
+                <Select id="cat" value={form.category} onChange={set('category')}>
+                  <option value={AUTO}>{suggestion ? `Suggested: ${categoryLabel(suggestion.category)}` : 'Let the system decide'}</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {categoryLabel(c.name)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             </div>
 
-            <div>
-              <label className="block text-[11px] uppercase tracking-wider text-slate-700 font-bold mb-1.5 flex items-center space-x-1.5">
-                <Layers className="h-3.5 w-3.5 text-amber-600" />
-                <span>URGENCY_TIER</span>
-              </label>
-              <select
-                name="urgency"
-                value={formData.urgency}
-                onChange={handleChange}
-                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-slate-900"
-              >
-                <option value="HIGH">HIGH (Immediate remediation required)</option>
-                <option value="MEDIUM">MEDIUM (Temporary workaround viable)</option>
-                <option value="LOW">LOW (Scheduled sprint / non-urgent patch)</option>
-              </select>
-            </div>
-          </div>
+            <fieldset className="grid gap-5 sm:grid-cols-2">
+              <legend className="sr-only">Impact and urgency</legend>
+              <Field label="How many people does it affect?" htmlFor="impact" hint={IMPACT_HELP[form.impact]}>
+                <Select id="impact" value={form.impact} onChange={set('impact')}>
+                  <option value="LOW">Just me</option>
+                  <option value="MEDIUM">My team</option>
+                  <option value="HIGH">A department or customers</option>
+                </Select>
+              </Field>
+              <Field label="How urgent is it?" htmlFor="urgency" hint={URGENCY_HELP[form.urgency]}>
+                <Select id="urgency" value={form.urgency} onChange={set('urgency')}>
+                  <option value="LOW">It can wait</option>
+                  <option value="MEDIUM">Slowing me down</option>
+                  <option value="HIGH">Work has stopped</option>
+                </Select>
+              </Field>
+            </fieldset>
 
-          <div className="flex justify-end space-x-3 pt-3">
-            <button
-              type="button"
-              onClick={() => navigate('/incidents')}
-              className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-mono font-medium rounded-xl transition-colors"
-            >
-              ABORT
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs font-mono rounded-xl shadow-xs transition-colors flex items-center space-x-1.5 disabled:opacity-50"
-            >
-              <Send className="h-3.5 w-3.5" />
-              <span>{loading ? 'DISPATCHING_TELEMETRY...' : 'DISPATCH_INCIDENT'}</span>
-            </button>
-          </div>
-        </form>
+            <Field label="Roughly how many users are affected?" htmlFor="users" optional hint="50 or more raises the priority one level; 500 or more, two levels.">
+              <Input id="users" type="number" min={1} max={100000} className="max-w-40" value={form.affectedUsers} onChange={set('affectedUsers')} />
+            </Field>
+
+            <div className="flex justify-end gap-2 border-t border-line-soft pt-5">
+              <Button type="button" variant="secondary" onClick={() => navigate(-1)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={busy}>
+                {isEmployee ? 'Submit report' : 'Log incident'}
+              </Button>
+            </div>
+          </form>
+        </Panel>
+
+        <div className="space-y-4">
+          {similar.length > 0 && (
+            <Panel title="Already reported?">
+              <p className="mb-3 text-sm text-steel">{isEmployee ? 'Our team is already working on incidents that look like this. If yours is the same problem, you may not need to report it again.' : 'These open incidents look similar. Open one to link your work instead of filing a duplicate.'}</p>
+              <ul className="space-y-2">
+                {similar.map((s) => {
+                  const body = (
+                    <div className="flex items-start gap-2">
+                      <Copy className="mt-0.5 h-4 w-4 shrink-0 text-warn" aria-hidden />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">{s.title}</p>
+                        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                          {s.incidentNumber} <StatusBadge status={s.status} /> {Math.round(s.score * 100)}% match · {timeAgo(s.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                  // Employees cannot open other people's incidents, so they just see that it's known.
+                  return (
+                    <li key={s.id}>
+                      {isEmployee ? (
+                        <div className="rounded-lg border border-line p-3">{body}</div>
+                      ) : (
+                        <Link to={`/incidents/${s.id}`} className="block rounded-lg border border-line p-3 hover:bg-sunken">{body}</Link>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Panel>
+          )}
+
+          <Panel title="What happens next">
+            {suggestion && !form.category && (
+              <div className="mb-4 flex gap-3 rounded-lg bg-p3-soft p-3 text-sm">
+                <Lightbulb className="h-4 w-4 shrink-0 text-p3" aria-hidden />
+                <p>
+                  Looks like a <strong>{categoryLabel(suggestion.category)}</strong> issue ({Math.round(suggestion.confidence * 100)}% sure, based on
+                  “{suggestion.matchedKeywords.slice(0, 3).join('”, “')}”).
+                </p>
+              </div>
+            )}
+            <ol className="space-y-3 text-sm text-steel">
+              <li>
+                <strong className="text-ink">1. Classified</strong> as {chosenCategory ? categoryLabel(chosenCategory) : 'the closest category'}.
+              </li>
+              <li>
+                <strong className="text-ink">2. Prioritised</strong> from impact, urgency, the service's business criticality and number of users.
+              </li>
+              <li>
+                <strong className="text-ink">3. Deadlines set</strong> from the SLA policy for that priority.
+              </li>
+              <li>
+                <strong className="text-ink">4. Routed</strong> to a technician with matching skills and free capacity.
+              </li>
+              <li>
+                <strong className="text-ink">5. You're kept updated</strong> in the app and by email until it is resolved.
+              </li>
+            </ol>
+          </Panel>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

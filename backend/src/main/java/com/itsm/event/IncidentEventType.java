@@ -1,0 +1,19 @@
+package com.itsm.event;
+
+public enum IncidentEventType {
+    CREATED,
+    POSSIBLE_DUPLICATE,
+    ASSIGNED,
+    PRIORITY_CHANGED,
+    ACKNOWLEDGED,
+    INFO_REQUESTED,
+    INFO_PROVIDED,
+    RESOLVED,
+    REOPENED,
+    CLOSED,
+    SLA_WARNING,
+    SLA_BREACHED,
+    ESCALATED,
+    FRUSTRATION_ALERT,
+    FRUSTRATION_DISMISSED
+}

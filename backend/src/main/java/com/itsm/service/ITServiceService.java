@@ -38,7 +38,12 @@ public class ITServiceService {
     @Transactional
     public ITService updateService(Long id, ITServiceRequest request) {
         ITService service = itServiceRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("ITService", "id", id));
+                .orElseThrow(() -> new ResourceNotFoundException("IT service", "id", id));
+        itServiceRepository.findByName(request.getName())
+                .filter(other -> !other.getId().equals(id))
+                .ifPresent(other -> {
+                    throw new DuplicateResourceException("Another service is already called " + request.getName());
+                });
 
         service.setName(request.getName());
         service.setDescription(request.getDescription());
@@ -63,10 +68,10 @@ public class ITServiceService {
     }
 
     @Transactional
-    public void deactivateService(Long id) {
+    public void setActive(Long id, boolean active) {
         ITService service = itServiceRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("ITService", "id", id));
-        service.setActive(false);
+                .orElseThrow(() -> new ResourceNotFoundException("IT service", "id", id));
+        service.setActive(active);
         itServiceRepository.save(service);
     }
 }

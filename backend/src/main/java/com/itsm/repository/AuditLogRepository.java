@@ -12,9 +12,11 @@ import java.util.List;
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
 
-    List<AuditLog> findByIncidentOrderByTimestampDesc(Incident incident);
+    List<AuditLog> findByIncidentOrderByTimestampAsc(Incident incident);
 
     List<AuditLog> findByPerformedByOrderByTimestampDesc(User user);
 
     List<AuditLog> findByTimestampBetweenOrderByTimestampDesc(LocalDateTime start, LocalDateTime end);
+
+    List<AuditLog> findTop200ByOrderByTimestampDesc();
 }

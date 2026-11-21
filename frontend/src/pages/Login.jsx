@@ -1,164 +1,115 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Radio, Lock, User, ArrowRight, ShieldCheck, Terminal, Cpu } from 'lucide-react';
+import { Button, ErrorNote, Field, Input } from '../components/ui';
+import { ROLE } from '../lib/format';
+
+const DEMO = [
+  { username: 'admin', password: 'admin123', name: 'System Administrator', role: 'ADMIN' },
+  { username: 'tech_app', password: 'tech123', name: 'Marcus Taylor · applications', role: 'TECHNICIAN' },
+  { username: 'tech_network', password: 'tech123', name: 'Alex Chen · network', role: 'TECHNICIAN' },
+  { username: 'tech_db', password: 'tech123', name: 'Priya Sharma · database', role: 'TECHNICIAN' },
+  { username: 'emp_john', password: 'emp123', name: 'John Doe · finance', role: 'EMPLOYEE' },
+  { username: 'emp_sarah', password: 'emp123', name: 'Sarah Connor · HR', role: 'EMPLOYEE' },
+];
 
 export default function Login() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const { login, loading } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const [form, setForm] = useState({ username: '', password: '' });
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  if (isAuthenticated) return <Navigate to="/" replace />;
+
+  const submit = async (username, password) => {
+    setBusy(true);
     setError('');
     const res = await login(username, password);
-    if (res.success) {
-      navigate('/dashboard');
-    } else {
-      setError(res.message);
-    }
-  };
-
-  const handleQuickLogin = async (u, p) => {
-    setUsername(u);
-    setPassword(p);
-    setError('');
-    const res = await login(u, p);
-    if (res.success) {
-      navigate('/dashboard');
-    } else {
-      setError(res.message);
-    }
+    setBusy(false);
+    if (res.success) navigate('/');
+    else setError(res.message);
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Subtle Geometric Grid */}
-      <div className="absolute inset-0 bg-[radial-gradient(#CBD5E1_1px,transparent_1px)] [background-size:24px_24px] opacity-60 pointer-events-none" />
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-slate-200/40 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-slate-200/30 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl shadow-slate-200/60 p-8 border border-slate-200/90 relative z-10">
-        <div className="text-center mb-8">
-          <div className="inline-flex h-14 w-14 rounded-2xl bg-slate-900 items-center justify-center text-white shadow-lg shadow-slate-300 mb-4 ring-4 ring-slate-100">
-            <Radio className="h-7 w-7 text-slate-100 animate-pulse" />
-          </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight font-heading">
-            Incident Operations Command
-          </h1>
-          <p className="text-xs text-slate-500 mt-1 font-sans leading-relaxed">
-            Unified authentication portal for ITSM telemetry & resolution workflows
+    <div className="grid min-h-screen lg:grid-cols-[1fr_520px]">
+      <section className="hidden flex-col justify-between bg-ink p-12 text-paper lg:flex">
+        <div className="flex items-center gap-3">
+          <img src="/favicon.svg" alt="" className="h-9 w-9 rounded-lg ring-1 ring-white/20" />
+          <span className="text-lg font-bold">I-ITSM</span>
+        </div>
+        <div className="max-w-lg">
+          <h1 className="text-4xl font-bold leading-tight">Every incident, from report to resolution, on the clock.</h1>
+          <p className="mt-5 text-lg text-paper/70">
+            Report a problem in plain words. The desk classifies it, sets its priority and SLA, finds the right technician,
+            and keeps everyone updated until it is closed.
           </p>
         </div>
+        <p className="text-sm text-paper/50">CS F213 Object-Oriented Programming project · BITS Pilani, Hyderabad Campus</p>
+      </section>
 
-        {error && (
-          <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-mono flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-            <span>{error}</span>
-          </div>
-        )}
+      <section className="flex items-center justify-center bg-surface px-6 py-12">
+        <div className="w-full max-w-sm">
+          <h2 className="text-2xl font-bold">Sign in</h2>
+          <p className="mt-1 text-steel">Use your service desk account.</p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 tracking-tight mb-1.5 font-sans">
-              Operator Username / Handle
-            </label>
-            <div className="relative">
-              <User className="h-4 w-4 text-slate-400 absolute left-3.5 top-3" />
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                placeholder="e.g. admin, tech_network, or emp_john"
-                className="w-full pl-10 pr-4 py-2.5 text-sm font-sans bg-slate-50/70 text-slate-900 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-200 transition-colors placeholder:text-slate-400"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 tracking-tight mb-1.5 font-sans">
-              Security Key / Password
-            </label>
-            <div className="relative">
-              <Lock className="h-4 w-4 text-slate-400 absolute left-3.5 top-3" />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-                className="w-full pl-10 pr-4 py-2.5 text-sm font-sans bg-slate-50/70 text-slate-900 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-200 transition-colors placeholder:text-slate-400"
-              />
-            </div>
+          <div className="mt-6 space-y-4">
+            {params.get('expired') && !error && (
+              <div className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">Your session expired. Please sign in again.</div>
+            )}
+            <ErrorNote>{error}</ErrorNote>
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                submit(form.username, form.password);
+              }}
+            >
+              <Field label="Username" htmlFor="u">
+                <Input id="u" autoComplete="username" required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
+              </Field>
+              <Field label="Password" htmlFor="p">
+                <Input id="p" type="password" autoComplete="current-password" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              </Field>
+              <Button type="submit" className="w-full" loading={busy}>
+                Sign in
+              </Button>
+            </form>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full mt-2 py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl shadow-xs text-sm font-heading tracking-tight transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
-          >
-            <span>{loading ? 'Authenticating Identity...' : 'Sign In to Workspace'}</span>
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </form>
-
-        {/* Demo Fast Login Buttons */}
-        <div className="mt-8 pt-6 border-t border-slate-100">
-          <p className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest text-center mb-3">
-            ONE-CLICK ACADEMIC EVALUATION PROFILES
+          <p className="mt-4 text-sm text-steel">
+            New employee?{' '}
+            <Link to="/register" className="font-semibold text-p3 hover:underline">
+              Create an account
+            </Link>
           </p>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('admin', 'admin123')}
-              className="py-2.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-900 rounded-xl text-xs font-heading font-semibold border border-slate-200 transition-all text-center hover:border-slate-300 shadow-xs"
-            >
-              Commander<br/><span className="text-[10px] text-slate-500 font-sans font-normal">admin</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('tech_network', 'tech123')}
-              className="py-2.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-900 rounded-xl text-xs font-heading font-semibold border border-slate-200 transition-all text-center hover:border-slate-300 shadow-xs"
-            >
-              Network Tech<br/><span className="text-[10px] text-slate-600 font-sans font-normal">Alex Chen</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('emp_john', 'emp123')}
-              className="py-2.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-900 rounded-xl text-xs font-heading font-semibold border border-slate-200 transition-all text-center hover:border-slate-300 shadow-xs"
-            >
-              Reporter<br/><span className="text-[10px] text-slate-600 font-sans font-normal">emp_john</span>
-            </button>
-          </div>
 
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('tech_db', 'tech123')}
-              className="py-2 px-2 bg-slate-50 hover:bg-slate-100 text-slate-900 rounded-xl text-xs font-heading font-semibold border border-slate-200 transition-all text-center hover:border-slate-300 shadow-xs"
-            >
-              Database Tech<br/><span className="text-[10px] text-slate-600 font-sans font-normal">Priya Sharma (tech_db)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('tech_app', 'tech123')}
-              className="py-2 px-2 bg-slate-50 hover:bg-slate-100 text-slate-900 rounded-xl text-xs font-heading font-semibold border border-slate-200 transition-all text-center hover:border-slate-300 shadow-xs"
-            >
-              App & Auth Tech<br/><span className="text-[10px] text-slate-600 font-sans font-normal">Marcus Taylor (tech_app)</span>
-            </button>
+          <div className="mt-10 border-t border-line-soft pt-6">
+            <p className="text-sm font-semibold">Demo accounts</p>
+            <p className="mb-3 text-[13px] text-muted">Pick one to see that role's workspace.</p>
+            <ul className="divide-y divide-line-soft rounded-lg border border-line">
+              {DEMO.map((d) => (
+                <li key={d.username}>
+                  <button
+                    onClick={() => submit(d.username, d.password)}
+                    disabled={busy}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-sunken"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">{d.name}</span>
+                      <span className="text-xs text-muted">{d.username}</span>
+                    </span>
+                    <span className="shrink-0 text-xs font-semibold" style={{ color: ROLE[d.role].color }}>
+                      {ROLE[d.role].label}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
-
-        <p className="text-center text-xs font-sans text-slate-500 mt-6">
-          New employee node?{' '}
-          <Link to="/register" className="text-slate-900 hover:text-slate-700 font-semibold underline underline-offset-4 font-sans">
-            Register Operator
-          </Link>
-        </p>
-      </div>
+      </section>
     </div>
   );
 }

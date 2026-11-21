@@ -21,4 +21,5 @@ public class NotificationResponse {
     private LocalDateTime createdAt;
     private LocalDateTime readAt;
     private String incidentNumber;
+    private Long incidentId;
 }

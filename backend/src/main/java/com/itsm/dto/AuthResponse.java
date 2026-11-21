@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 public class AuthResponse {
 
     private String token;
+    private Long id;
 
     @Builder.Default
     private String tokenType = "Bearer";

@@ -21,4 +21,5 @@ public class AuditLogResponse {
     private String performedByName;
     private LocalDateTime timestamp;
     private String incidentNumber;
+    private Long incidentId;
 }

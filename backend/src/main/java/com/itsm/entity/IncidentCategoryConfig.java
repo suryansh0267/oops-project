@@ -7,6 +7,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Builder
@@ -27,6 +29,13 @@ public class IncidentCategoryConfig {
 
     @Builder.Default
     private boolean active = true;
+
+    /** Keywords used by the automatic categoriser. Admins can edit these. */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "incident_category_keywords", joinColumns = @JoinColumn(name = "category_id"))
+    @Column(name = "keyword")
+    @Builder.Default
+    private List<String> keywords = new ArrayList<>();
 
     private LocalDateTime createdAt;
 

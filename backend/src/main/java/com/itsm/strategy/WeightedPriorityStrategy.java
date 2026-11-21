@@ -9,6 +9,21 @@ import org.springframework.stereotype.Component;
 public class WeightedPriorityStrategy implements PriorityCalculationStrategy {
 
     @Override
+    public String getKey() {
+        return "weightedPriority";
+    }
+
+    @Override
+    public String getDisplayName() {
+        return "Weighted score";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Score = 0.4 impact + 0.35 urgency + 0.25 criticality. 2.5+ is P1, 1.8+ P2, 1.2+ P3, else P4.";
+    }
+
+    @Override
     public Priority calculatePriority(Impact impact, Urgency urgency, int businessCriticality) {
         double score = (impact.getValue() * 0.4) + (urgency.getValue() * 0.35) + (businessCriticality * 0.25);
 

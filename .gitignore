@@ -36,3 +36,5 @@ desktop.ini
 
 # Agent & temporary files
 .gemini/
+.env
+**/.env

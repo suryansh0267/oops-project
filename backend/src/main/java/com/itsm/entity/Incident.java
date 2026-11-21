@@ -10,7 +10,6 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Data
 @Builder
@@ -19,8 +18,6 @@ import java.util.concurrent.atomic.AtomicLong;
 @Entity
 @Table(name = "incidents")
 public class Incident {
-
-    private static final AtomicLong COUNTER = new AtomicLong(1000);
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,8 +40,12 @@ public class Incident {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Enumerated(EnumType.STRING)
-    private IncidentCategory category;
+    /**
+     * Category name, validated against the admin-managed incident_categories table.
+     * Stored as plain text (same column type as the old enum) so admins can add
+     * categories at runtime without a code change.
+     */
+    private String category;
 
     @Enumerated(EnumType.STRING)
     private Impact impact;
@@ -89,6 +90,21 @@ public class Incident {
 
     private int feedbackRating;
 
+    /** Number of users the reporter says are affected; feeds the priority calculation. */
+    private Integer affectedUsers;
+
+    /** When the "SLA approaching" warning was sent, so it is only sent once. */
+    private LocalDateTime slaWarningSentAt;
+
+    /** 0 = not escalated; 1 = reassigned/team lead; 2 = IT manager (admins) alerted. */
+    private Integer escalationLevel;
+
+    /** Staff-only heuristic flag, omitted from employee-facing incident DTOs. */
+    @Enumerated(EnumType.STRING)
+    private com.itsm.intelligence.frustration.FrustrationLevel frustrationLevel;
+    @Column(length = 500)
+    private String frustrationReasons;
+
     @OneToMany(mappedBy = "incident", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<IncidentNote> notes = new ArrayList<>();
@@ -101,13 +117,14 @@ public class Incident {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
-        if (this.incidentNumber == null) {
-            this.incidentNumber = "INC" + COUNTER.incrementAndGet();
-        }
     }
 
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    public int escalationLevelOrZero() {
+        return escalationLevel == null ? 0 : escalationLevel;
     }
 }

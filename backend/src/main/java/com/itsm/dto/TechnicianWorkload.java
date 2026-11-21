@@ -19,5 +19,6 @@ public class TechnicianWorkload {
     private int maxIncidents;
     private int totalResolved;
     private double avgResolutionMinutes;
+    private boolean available;
     private List<String> skills;
 }

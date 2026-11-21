@@ -12,14 +12,27 @@ import java.util.Optional;
 public class SkillBasedAssignmentStrategy implements AssignmentStrategy {
 
     @Override
+    public String getKey() {
+        return "skillBased";
+    }
+
+    @Override
+    public String getDisplayName() {
+        return "Skill-based";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Picks a technician whose skills match the incident category; ties go to the least busy.";
+    }
+
+    @Override
     public Optional<TechnicianProfile> assignTechnician(Incident incident, List<TechnicianProfile> availableTechnicians) {
         if (availableTechnicians == null || availableTechnicians.isEmpty()) {
             return Optional.empty();
         }
 
-        String categoryName = incident.getCategory() != null
-                ? incident.getCategory().name().toLowerCase()
-                : "";
+        String categoryName = incident.getCategory() != null ? incident.getCategory() : "";
 
         // Filter technicians whose skills match the incident category
         List<TechnicianProfile> matchedTechnicians = availableTechnicians.stream()

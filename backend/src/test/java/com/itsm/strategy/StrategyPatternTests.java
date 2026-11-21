@@ -4,7 +4,6 @@ import com.itsm.entity.Incident;
 import com.itsm.entity.TechnicianProfile;
 import com.itsm.entity.User;
 import com.itsm.enums.Impact;
-import com.itsm.enums.IncidentCategory;
 import com.itsm.enums.Priority;
 import com.itsm.enums.Urgency;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,7 +70,7 @@ class StrategyPatternTests {
     @DisplayName("Test 5: Skill-Based Strategy - Matches technician skill to incident category")
     void testSkillBasedAssignment_MatchFound() {
         Incident incident = Incident.builder()
-                .category(IncidentCategory.NETWORK)
+                .category("NETWORK")
                 .build();
 
         TechnicianProfile tech1 = TechnicianProfile.builder()
@@ -95,7 +94,7 @@ class StrategyPatternTests {
     @DisplayName("Test 6: Skill-Based Strategy - No match returns empty optional")
     void testSkillBasedAssignment_NoMatch() {
         Incident incident = Incident.builder()
-                .category(IncidentCategory.DATABASE)
+                .category("DATABASE")
                 .build();
 
         TechnicianProfile tech1 = TechnicianProfile.builder()
@@ -111,7 +110,7 @@ class StrategyPatternTests {
     @DisplayName("Test 7: Skill-Based Strategy - Ties broken by lower workload")
     void testSkillBasedAssignment_WorkloadTieBreak() {
         Incident incident = Incident.builder()
-                .category(IncidentCategory.SOFTWARE)
+                .category("SOFTWARE")
                 .build();
 
         TechnicianProfile tech1 = TechnicianProfile.builder()
@@ -149,5 +148,24 @@ class StrategyPatternTests {
 
         assertTrue(assigned.isPresent());
         assertEquals(2L, assigned.get().getId());
+    }
+
+    @Test
+    @DisplayName("Strategies expose a stable key, name and description for the admin screen")
+    void strategiesDescribeThemselves() {
+        assertEquals("skillBased", skillStrategy.getKey());
+        assertEquals("loadBased", loadStrategy.getKey());
+        assertEquals("defaultPriority", defaultStrategy.getKey());
+        assertFalse(weightedStrategy.getDescription().isBlank());
+    }
+
+    @Test
+    @DisplayName("Registry switches the active strategy and rejects unknown keys")
+    void registrySwitching() {
+        AssignmentStrategyManager manager = new AssignmentStrategyManager(List.of(skillStrategy, loadStrategy));
+        assertEquals("skillBased", manager.getActiveStrategyKey());
+        manager.setActiveStrategy("loadBased");
+        assertEquals("loadBased", manager.getActiveStrategyKey());
+        assertThrows(com.itsm.exception.BadRequestException.class, () -> manager.setActiveStrategy("nope"));
     }
 }

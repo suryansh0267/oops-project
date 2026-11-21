@@ -9,6 +9,21 @@ import org.springframework.stereotype.Component;
 public class DefaultPriorityStrategy implements PriorityCalculationStrategy {
 
     @Override
+    public String getKey() {
+        return "defaultPriority";
+    }
+
+    @Override
+    public String getDisplayName() {
+        return "Multiplicative score";
+    }
+
+    @Override
+    public String getDescription() {
+        return "Score = impact x urgency x business criticality (1-45). 27+ is P1, 12+ P2, 6+ P3, else P4.";
+    }
+
+    @Override
     public Priority calculatePriority(Impact impact, Urgency urgency, int businessCriticality) {
         int score = impact.getValue() * urgency.getValue() * businessCriticality;
 

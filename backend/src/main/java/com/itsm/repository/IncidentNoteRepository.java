@@ -10,5 +10,5 @@ import java.util.List;
 @Repository
 public interface IncidentNoteRepository extends JpaRepository<IncidentNote, Long> {
 
-    List<IncidentNote> findByIncidentOrderByCreatedAtDesc(Incident incident);
+    List<IncidentNote> findByIncidentOrderByCreatedAtAsc(Incident incident);
 }

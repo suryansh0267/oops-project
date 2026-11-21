@@ -196,3 +196,51 @@ For your recorded demonstration (15–20 mins), follow these 3 complete end-to-e
 3. Submit a 5-star rating and feedback comment.
 4. Now, go to **Report Incident** and start typing a duplicate title: *"Payment application unavailable during checkout"*.
 5. Observe the **Intelligent Duplicate Detection Warning** instantly alert the user with the existing ticket number to avoid duplicate clutter!
+
+---
+
+## 7. Chatbot & Frustration Detection
+
+### Problem, design and OO pattern mapping
+
+The new assistant helps three JWT-authenticated roles with real incident information while letting employees report incidents without learning the incident-management API. Report drafting runs through persisted dialogue states `IDLE → AWAIT_SERVICE → AWAIT_DESCRIPTION → AWAIT_IMPACT → AWAIT_CONFIRM → IDLE`; creation occurs **only** on the single-use confirmation turn via the existing `IncidentService`. It therefore inherits classification, priority calculation, SLA rules, audit, notifications and auto-assignment. A second confirmation in `IDLE` is inert. A `REQUEST_HUMAN` intent similarly requires confirmation before a support-request note is recorded; there is no pretend live human operator.
+
+`ChatEngine` and `ChatEngineRegistry` reuse the existing **Strategy** abstraction. `RuleBasedChatEngine` is the no-key default; `LlmChatEngine` is a **Decorator** that delegates report orchestration to the same state handler and only enriches JSON extraction / generic phrasing. `GeminiLlmClient`, `AnthropicLlmClient` and `LlmTransport` are **Adapters** around one-attempt HTTP request/response, with header authentication and timeout fallback. Fixed prompts treat masked user text as untrusted data. User-visible text is escaped naturally by React (not inserted as HTML). Per-message data and session state live in `ChatMessage` and `ChatSession` JPA entities, with a unique user-session constraint and 200-message retention.
+
+Frustration detection uses **Strategy** (`FrustrationSignal` with `TextFrustrationSignal`, `BehaviourFrustrationSignal`, optional low-weight `LlmSentimentSignal`) and immutable `SignalResult` / `FrustrationAssessment` records. The detector computes a 0–100 score with time decay (12-hour half-life), smoothing (35% decayed history + 65% latest evidence), small sustained-frustration bonus, and thresholds **25 / 55 / 85** for ANNOYED / FRUSTRATED / CRITICAL. Example: `still not fixed!!` ≈ 38 (ANNOYED) → `THIRD TIME this week, useless` ≈ 67 (FRUSTRATED) → explicit manager demand ≥ 85 (CRITICAL). Direct manager demands alone reach FRUSTRATED but do not instantly become CRITICAL. Technical failures such as `the database server is not responding` are neutral absent service-directed anger. The assessment is a **heuristic, not a diagnosis**; false positives are possible.
+
+On a rising level at FRUSTRATED or higher, an **Observer** event `FrustrationDetectedEvent` triggers `FrustrationEventListener`, which writes `FrustrationRecord`, raises the staff-only incident flag, logs an audit and publishes an existing `IncidentEvent` for `NotificationService`. The assignee receives in-app notification; at CRITICAL, admins receive in-app + email + SMS Outbox records. Optional SMTP uses `JavaMailSender`, but Outbox persistence is independent of actual delivery. `FrustrationState` tracks per-user/incident smoothing, cooldown and dismissals. `IncidentAccessPolicy` applies to the chatbot and staff-only data routes; regular employee incident DTOs and chat history contain no frustration scores or levels. The admin dashboard uses Asia/Kolkata dates for 14-day trends; staff can dismiss flags with an audited endpoint. Scheduled rechecks examine a bounded batch.
+
+### Key classes and endpoints
+
+| Layer | Classes / routes |
+|---|---|
+| Chat intents and states | `IntentClassifier`, `ChatState`, `ChatService`, `ChatSession`, `ChatMessage` |
+| Engines / LLM | `ChatEngine`, `RuleBasedChatEngine`, `LlmChatEngine`, `GeminiLlmClient`, `AnthropicLlmClient`, `LlmTransport` |
+| Chat HTTP | `POST /api/chat/message`, `GET /api/chat/history`, `POST /api/chat/reset` |
+| Frustration strategies | `FrustrationDetector`, `TextFrustrationSignal`, `BehaviourFrustrationSignal`, `LlmSentimentSignal`, `ProfanitySanitizer` |
+| Frustration persistence and observer | `FrustrationState`, `FrustrationRecord`, `FrustrationDetectedEvent`, `FrustrationEventListener` |
+| Staff HTTP | `POST /api/incidents/{id}/frustration/dismiss`, `GET /api/dashboard/frustration`, `GET /api/admin/frustration-config` |
+| Search | Existing `GET /api/incidents` gains staff-only `frustration` and `frustratedFirst` parameters |
+| React | `ChatWidget`, `FrustrationBadge`, `IncidentRows`, `IncidentDetail`, `IncidentList`, `MyQueue`, `Home`, `AdminAutomation` |
+
+### Configuration and privacy
+
+`CHATBOT_ENGINE` defaults to `rule`; `CHATBOT_LLM_PROVIDER` selects `gemini` or `anthropic` when set to `llm`. Optional keys and model IDs are passed from `.env` through Docker environment into `application.properties`. `FRUSTRATION_ENABLED`, `FRUSTRATION_ANNOYED`, `FRUSTRATION_FRUSTRATED`, `FRUSTRATION_CRITICAL`, `FRUSTRATION_DECAY_HOURS`, `FRUSTRATION_COOLDOWN_MINUTES`, `FRUSTRATION_RECHECK_INTERVAL_MS`, `FRUSTRATION_REPEAT_WINDOW_DAYS`, `FRUSTRATION_LLM_SENTIMENT` and `FRUSTRATION_AUTO_ESCALATE` control heuristic analysis. Auto-escalation and LLM sentiment are off by default. `MAIL_ENABLED`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`, `MAIL_SMTP_AUTH` and `MAIL_STARTTLS` control optional SMTP. The Automation screen displays frustration settings read-only; env changes require restart. Raw profanity is masked before persistence or outbound LLM calls. API keys are never put in URLs or logged.
+
+### Added JUnit test cases (definitions; execution must be verified separately)
+
+| # | Test case | Kind | Expected result | Test class |
+|---|---|---|---|---|
+| TC18 | `technicalFailuresDoNotBecomePersonalFrustration` | Normal / false positive | Database failure stays CALM | `FrustrationDetectorTests` |
+| TC19 | `escalatingDemoLadderReachesCriticalInThreeTurns` | Business rule | Levels ANNOYED → FRUSTRATED → CRITICAL | `FrustrationDetectorTests` |
+| TC20 | `singleAllCapsOutburstCannotBeCritical` | Boundary | Single angry message stays below CRITICAL | `FrustrationDetectorTests` |
+| TC21 | `previousFrustrationDecaysAfterCalmTime` | Time / decay | Calm activity lowers score after simulated time | `FrustrationDetectorTests` |
+| TC22 | `profanityIsMaskedBeforeStorage` | Invalid input | Profanity replaced by `[redacted]` | `FrustrationDetectorTests` |
+| TC23 | `intentsMatchPatterns` | Normal | Rule patterns classify role-related intents | `IntentClassifierTests` |
+| TC24 | `reportFlowCreatesOnlyAfterConfirmationAndDoubleConfirmIsSafe` | Business rule | Exactly one incident create after confirmed transition | `ChatServiceTests` |
+| TC25 | `employeeCannotLearnAnythingAboutAnotherReporterIncident` | Authorisation | Generic refusal, no private details | `ChatServiceTests` |
+| TC26 | `malformedJsonFallsBackToRules` | Invalid provider data | Local rule output remains available | `LlmFallbackTests` |
+| TC27 | `timeoutFallsBackWithoutPropagatingException` | Exception | Provider timeout does not break chat extraction | `LlmFallbackTests` |
+
+**Verification caveat:** The source archive's Maven parent dependency could not be fetched in this environment. New and existing JUnit tests are included, but execution must be confirmed on a machine with Maven Central access. The frontend build was run locally. Schema updates use Hibernate's `ddl-auto=update`; reset disposable old volumes with care because new enum literals may conflict with historical CHECK constraints.

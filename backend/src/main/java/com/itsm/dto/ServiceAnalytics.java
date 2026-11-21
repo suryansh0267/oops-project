@@ -13,6 +13,7 @@ public class ServiceAnalytics {
 
     private Long serviceId;
     private String serviceName;
+    private int businessCriticality;
     private long totalIncidents;
     private long openIncidents;
     private long resolvedIncidents;
